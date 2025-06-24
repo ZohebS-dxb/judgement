@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { database, ref, get, set, update } from './firebase';
-import { useNavigate } from 'react-router-dom';
 
 const players = [
   'Zo', 'Divya',
@@ -13,7 +12,6 @@ const players = [
 
 export default function PlayerSelection() {
   const [selectedPlayers, setSelectedPlayers] = useState([]);
-  const navigate = useNavigate();
 
   const togglePlayer = (name) => {
     if (selectedPlayers.includes(name)) {
@@ -45,7 +43,7 @@ export default function PlayerSelection() {
       }
     }
 
-    navigate('/scorer', { state: { selectedPlayers } });
+    alert("Players saved. Game started!");
   };
 
   return (
@@ -58,9 +56,10 @@ export default function PlayerSelection() {
             key={index}
             onClick={() => togglePlayer(name)}
             className={
-              "text-lg font-bold px-6 py-3 rounded-2xl shadow-md transition-colors duration-200 " +
-              (isSelected(name) ? 'bg-[#9C99C7] text-white' : 'bg-[#F8EEE0] text-[#B6B4DC]')
-            }
+  `text-lg font-bold px-6 py-3 rounded-2xl shadow-md transition-colors duration-200 ` +
+  (isSelected(name) ? 'bg-[#9C99C7] text-white' : 'bg-[#F8EEE0] text-[#B6B4DC]')
+}
+
           >
             {name.toUpperCase()}
           </button>
