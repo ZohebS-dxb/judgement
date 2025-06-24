@@ -25,7 +25,10 @@ export default function PlayerSelection() {
 
   const isSelected = (name) => selectedPlayers.includes(name);
 
-  const handleStartGame = async () => {
+const handleStartGame = async () => {
+  try {
+    console.log("Selected players:", selectedPlayers);
+
     for (const name of selectedPlayers) {
       const playerRef = ref(database, `judgementplayers/${name}`);
       const snapshot = await get(playerRef);
@@ -45,8 +48,14 @@ export default function PlayerSelection() {
       }
     }
 
+    console.log("Navigating to scorer...");
     navigate('/scorer', { state: { selectedPlayers } });
-  };
+
+  } catch (error) {
+    console.error("Error in handleStartGame:", error);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-[#B6B4DC] flex flex-col items-center py-8 font-poppins">
