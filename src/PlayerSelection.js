@@ -55,10 +55,11 @@ export default function PlayerSelection() {
           <button
             key={index}
             onClick={() => togglePlayer(name)}
-            className={\`
-              text-lg font-bold px-6 py-3 rounded-2xl shadow-md transition-colors duration-200
-              \${isSelected(name) ? 'bg-[#9C99C7] text-white' : 'bg-[#F8EEE0] text-[#B6B4DC]'}
-            \`}
+            className={
+  `text-lg font-bold px-6 py-3 rounded-2xl shadow-md transition-colors duration-200 ` +
+  (isSelected(name) ? 'bg-[#9C99C7] text-white' : 'bg-[#F8EEE0] text-[#B6B4DC]')
+}
+
           >
             {name.toUpperCase()}
           </button>
