@@ -35,7 +35,7 @@ const handleStartGame = async () => {
   try {
     for (const name of selectedPlayers) {
       console.log("Checking player:", name);
-      const playerRef = ref(database, `judgementplayers/${name}`);
+      const playerRef = ref(database, `players/${name}`);
       const snapshot = await get(playerRef);
 
       if (snapshot.exists()) {
