@@ -52,9 +52,11 @@ const handleStartGame = async () => {
     navigate('/scorer', { state: { selectedPlayers } });
 
   } catch (error) {
-    console.error("Error in handleStartGame:", error);
+    console.error("🔥 Error in handleStartGame:", error);
   }
 };
+
+
 
 
   return (
