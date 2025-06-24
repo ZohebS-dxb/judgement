@@ -30,19 +30,22 @@ export default function PlayerSelection() {
   const isSelected = (name) => selectedPlayers.includes(name);
 
 const handleStartGame = async () => {
-  try {
-    console.log("Selected players:", selectedPlayers);
+  console.log("Selected players:", selectedPlayers);
 
+  try {
     for (const name of selectedPlayers) {
+      console.log("Checking player:", name);
       const playerRef = ref(database, `judgementplayers/${name}`);
       const snapshot = await get(playerRef);
 
       if (snapshot.exists()) {
         const data = snapshot.val();
+        console.log(`Updating ${name}...`);
         await update(playerRef, {
           gamesPlayed: (data.gamesPlayed || 0) + 1
         });
       } else {
+        console.log(`Creating ${name}...`);
         await set(playerRef, {
           gamesPlayed: 1,
           gamesWon: 0,
@@ -56,9 +59,10 @@ const handleStartGame = async () => {
     navigate('/scorer', { state: { selectedPlayers } });
 
   } catch (error) {
-    console.error("🔥 Error in handleStartGame:", error);
+    console.error("🔥 Firebase error:", error);
   }
 };
+
 
 
 
