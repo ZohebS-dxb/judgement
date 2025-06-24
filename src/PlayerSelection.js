@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const players = [
   'Zo', 'Divya',
@@ -10,6 +10,18 @@ const players = [
 ];
 
 export default function PlayerSelection() {
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+
+  const togglePlayer = (name) => {
+    if (selectedPlayers.includes(name)) {
+      setSelectedPlayers(selectedPlayers.filter(p => p !== name));
+    } else if (selectedPlayers.length < 6) {
+      setSelectedPlayers([...selectedPlayers, name]);
+    }
+  };
+
+  const isSelected = (name) => selectedPlayers.includes(name);
+
   return (
     <div className="min-h-screen bg-[#B6B4DC] flex flex-col items-center py-8 font-poppins">
       <h1 className="text-4xl font-extrabold text-white mb-8">JUDGEMENT</h1>
@@ -18,7 +30,12 @@ export default function PlayerSelection() {
         {players.map((name, index) => (
           <button
             key={index}
-            className="bg-[#F8EEE0] text-[#B6B4DC] text-lg font-bold px-6 py-3 rounded-2xl shadow-md"
+            onClick={() => togglePlayer(name)}
+            className={`text-lg font-bold px-6 py-3 rounded-2xl shadow-md transition-colors duration-200 ${
+              isSelected(name)
+                ? 'bg-[#9C99C7] text-white'
+                : 'bg-[#F8EEE0] text-[#B6B4DC]'
+            }`}
           >
             {name.toUpperCase()}
           </button>
