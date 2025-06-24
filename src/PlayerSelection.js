@@ -25,7 +25,7 @@ export default function PlayerSelection() {
 
   const handleStartGame = async () => {
     for (const name of selectedPlayers) {
-      const playerRef = ref(database, `players/${name}`);
+      const playerRef = ref(database, `judgementplayers/${name}`);
       const snapshot = await get(playerRef);
 
       if (snapshot.exists()) {
