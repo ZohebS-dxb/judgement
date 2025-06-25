@@ -11,10 +11,6 @@ const players = [
   'Guest', 'Guest 2',
 ];
 
-// Add this to PlayerSelection.js
-// force redeploy
-
-
 export default function PlayerSelection() {
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const navigate = useNavigate();
@@ -29,43 +25,32 @@ export default function PlayerSelection() {
 
   const isSelected = (name) => selectedPlayers.includes(name);
 
-const handleStartGame = async () => {
-  console.log("Selected players:", selectedPlayers);
+  const handleStartGame = async () => {
+    try {
+      for (const name of selectedPlayers) {
+        const playerRef = ref(database, `players/${name}`);
+        const snapshot = await get(playerRef);
 
-  try {
-    for (const name of selectedPlayers) {
-      console.log("Checking player:", name);
-      const playerRef = ref(database, `judgementplayers/${name}`);
-      const snapshot = await get(playerRef);
-
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        console.log(`Updating ${name}...`);
-        await update(playerRef, {
-          gamesPlayed: (data.gamesPlayed || 0) + 1
-        });
-      } else {
-        console.log(`Creating ${name}...`);
-        await set(playerRef, {
-          gamesPlayed: 1,
-          gamesWon: 0,
-          gamesLastPlace: 0,
-          podiums: 0
-        });
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          await update(playerRef, {
+            gamesPlayed: (data.gamesPlayed || 0) + 1
+          });
+        } else {
+          await set(playerRef, {
+            gamesPlayed: 1,
+            gamesWon: 0,
+            gamesLastPlace: 0,
+            podiums: 0
+          });
+        }
       }
+
+      navigate('/scorer', { state: { selectedPlayers } });
+    } catch (error) {
+      console.error("Firebase error:", error);
     }
-
-    console.log("Navigating to scorer...");
-    navigate('/scorer', { state: { selectedPlayers } });
-
-  } catch (error) {
-    console.error("🔥 Firebase error:", error);
-  }
-};
-
-
-
-
+  };
 
   return (
     <div className="min-h-screen bg-[#B6B4DC] flex flex-col items-center py-8 font-poppins">
