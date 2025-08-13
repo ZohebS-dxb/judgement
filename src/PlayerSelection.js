@@ -1,5 +1,5 @@
+// src/pages/PlayerSelection.jsx
 import React, { useState } from 'react';
-import { database, ref, get, set, update } from './firebase';
 import { useNavigate } from 'react-router-dom';
 
 const players = [
@@ -16,40 +16,43 @@ export default function PlayerSelection() {
   const navigate = useNavigate();
 
   const togglePlayer = (name) => {
-    if (selectedPlayers.includes(name)) {
-      setSelectedPlayers(selectedPlayers.filter(p => p !== name));
-    } else if (selectedPlayers.length < 6) {
-      setSelectedPlayers([...selectedPlayers, name]);
-    }
+    setSelectedPlayers((prev) => {
+      if (prev.includes(name)) return prev.filter(p => p !== name);
+      if (prev.length >= 6) return prev; // keep your max 6 rule
+      return [...prev, name];
+    });
   };
 
   const isSelected = (name) => selectedPlayers.includes(name);
 
-  const handleStartGame = async () => {
-    try {
-      for (const name of selectedPlayers) {
-        const playerRef = ref(database, `players/${name}`);
-        const snapshot = await get(playerRef);
-
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          await update(playerRef, {
-            gamesPlayed: (data.gamesPlayed || 0) + 1
-          });
-        } else {
-          await set(playerRef, {
-            gamesPlayed: 1,
-            gamesWon: 0,
-            gamesLastPlace: 0,
-            podiums: 0
-          });
-        }
-      }
-
-      navigate('/scorer', { state: { selectedPlayers } });
-    } catch (error) {
-      console.error("Firebase error:", error);
+  const handleStartGame = () => {
+    if (selectedPlayers.length < 2) {
+      alert('Pick at least 2 players to start.');
+      return;
     }
+
+    // Clear previous game state so the new game starts fresh
+    try {
+      localStorage.removeItem('judgement_scores');
+      localStorage.removeItem('judgement_step2');
+      localStorage.setItem('judgement_round', '1');
+      localStorage.setItem('judgement_suitIdx', '0');
+    } catch {}
+
+    // Save selection in the shape Page 2 expects
+    // (both fields set to the chosen names)
+    try {
+      localStorage.setItem(
+        'judgement_step1',
+        JSON.stringify({
+          players: selectedPlayers,
+          selected: selectedPlayers,
+        })
+      );
+    } catch {}
+
+    // Navigate to your scorer page (keeping your original route)
+    navigate('/scorer', { state: { selectedPlayers } });
   };
 
   return (
@@ -74,7 +77,8 @@ export default function PlayerSelection() {
       <div className="mt-10 w-full px-6 space-y-4">
         <button
           onClick={handleStartGame}
-          className="w-full bg-[#9C99C7] text-white font-bold py-3 rounded-xl shadow-md"
+          className="w-full bg-[#9C99C7] text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-60"
+          disabled={selectedPlayers.length < 2}
         >
           Start Game
         </button>

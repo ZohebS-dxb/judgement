@@ -2,8 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap');
+/* Poppins (kept) */
+* {
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+}
 
-body {
-  font-family: 'Poppins', sans-serif;
+/* New light theme background */
+html, body, #root {
+  height: 100%;
+  background: #9ECAD6;
 }
