@@ -1,5 +1,9 @@
 node_modules/
-build/
-dist/
+.next/
+coverage/
 .env
+.env.local
+.vercel/
+*.log
+*.tsbuildinfo
 .DS_Store
