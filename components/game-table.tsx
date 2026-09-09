@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Card, ClientGameState, RoundScoreSnapshot } from "@/lib/game/types";
+import { bidCallStatus } from "@/lib/game/bidding";
 import { PlayingCard } from "./playing-card";
 
 type ActionInput = { type: "place_bid"; bid: number } | { type: "play_card"; card: Card } | { type: "scorecard_ready" } | { type: "end_game" };
@@ -78,6 +79,7 @@ export function GameTable({ gameId }: { gameId: string }) {
   const scoreSeconds = state.scorecardEndsAt ? Math.max(0, Math.ceil((new Date(state.scorecardEndsAt).getTime() - now) / 1000)) : 0;
   const connected = (id: string) => now - new Date(state.presence[id] ?? 0).getTime() < 20_000;
   const winners = state.phase === "game_complete" ? state.players.filter((player) => player.totalScore === Math.max(...state.players.map((other) => other.totalScore))) : [];
+  const callStatus = state.phase === "bidding" || state.phase === "game_complete" ? null : bidCallStatus(state.players, state.cardsDealt);
   const displaySeats = state.players.length === 3 ? [seats[1], seats[2], seats[0]] : [seats[1], seats[2], seats[0], seats[3]];
   const handColumns = state.hand.length > 9 ? 9 : Math.max(1, state.hand.length);
   const playCard = (card: Card) => { if (!state.legalCardIds.includes(cid(card)) || busy) return; void act({ type: "play_card", card }); };
@@ -87,6 +89,7 @@ export function GameTable({ gameId }: { gameId: string }) {
     <header className="top-game-bar">
       <strong className={state.trump === "hearts" || state.trump === "diamonds" ? "red-suit" : ""}>{suitLabel[state.trump]}</strong>
       <span>Deal {state.cardsDealt}</span>
+      {callStatus && <b className={`call-status ${callStatus === "EXACT" ? "exact" : ""}`}>{callStatus}</b>}
       <button className="end-game-icon" onClick={() => setShowEnd(true)} aria-label="End Game" title="End Game"><DoorOpen/></button>
     </header>
     <div className={`turn-announcement ${myTurn ? "local-turn" : ""}`}>{turnText}</div>
@@ -113,17 +116,20 @@ export function GameTable({ gameId }: { gameId: string }) {
 
     {autoBidNotice && <div className="auto-bid-note">Time expired. Bid 0 submitted.</div>}
     {state.phase === "round_complete" && <Scoreboard state={state} history={state.scoreHistory ?? []} countdown={scoreSeconds} ready={state.readyPlayerIds.includes(participantId)} onReady={() => void act({ type: "scorecard_ready" })}/>}
-    {state.phase === "game_complete" && <Scoreboard state={state} history={state.scoreHistory ?? []} final winners={winners.map((player) => player.id)} onReady={() => location.assign("/")}/>}
+    {state.phase === "game_complete" && <Scoreboard state={state} history={state.scoreHistory ?? []} final winners={winners.map((player) => player.id)} gameId={gameId} onReady={() => location.assign("/")}/>}
     {showEnd && <EndGameConfirm state={state} onCancel={() => setShowEnd(false)} onConfirm={() => { setShowEnd(false); void act({ type: "end_game" }); }}/>}
     {error && <div className="toast-error">{error}</div>}
   </main>;
 }
 
-function Scoreboard({ state, history, countdown, ready, final, winners = [], onReady }: { state: ClientGameState; history: RoundScoreSnapshot[]; countdown?: number; ready?: boolean; final?: boolean; winners?: string[]; onReady: () => void }) {
+function Scoreboard({ state, history, countdown, ready, final, winners = [], gameId, onReady }: { state: ClientGameState; history: RoundScoreSnapshot[]; countdown?: number; ready?: boolean; final?: boolean; winners?: string[]; gameId?: string; onReady: () => void }) {
   const endedBy = state.endedByPlayerId ? state.players.find((player) => player.id === state.endedByPlayerId)?.name : null;
-  return <div className="scoreboard-backdrop"><section className="scoreboard"><div className="scoreboard-title">{final ? "Final Scoreboard" : "Scoreboard"}</div>{final && endedBy && <p className="end-attribution">{endedBy} ended the game.</p>}{countdown !== undefined && <p className="score-countdown">Next deal in {countdown}s</p>}<div className="score-scroll"><table><thead><tr><th>Trump</th><th>Deal</th>{state.players.map((player) => <th className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{player.name}</th>)}</tr></thead><tbody>{history.map((deal) => <tr key={deal.roundNumber}><td className={deal.trump === "hearts" || deal.trump === "diamonds" ? "red-suit" : ""}>{suitLabel[deal.trump]}</td><td>{deal.roundNumber}</td>{state.players.map((player) => <td className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{deal.results.find((result) => result.playerId === player.id)?.roundScore ?? ""}</td>)}</tr>)}</tbody><tfoot><tr><td></td><td>Total</td>{state.players.map((player) => <td className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{player.totalScore}</td>)}</tr></tfoot></table></div><button className="primary-button scoreboard-ok" disabled={ready} onClick={onReady}>{ready ? "Ready ✓" : "OK"}</button></section></div>;
+  const [isAdmin, setIsAdmin] = useState(false); const [finalized, setFinalized] = useState(false); const [finalizing, setFinalizing] = useState(false); const [finalizeError, setFinalizeError] = useState("");
+  useEffect(() => { if (!final) return; void fetch("/api/admin/session").then((response) => response.json()).then((body) => setIsAdmin(Boolean(body.authenticated))); }, [final]);
+  async function finalize() { if (!gameId || finalizing || finalized) return; setFinalizing(true); setFinalizeError(""); const response = await fetch(`/api/admin/games/${gameId}/finalize`, { method: "POST" }); const body = await response.json(); setFinalizing(false); if (!response.ok) return setFinalizeError(body.error); setFinalized(true); }
+  return <div className="scoreboard-backdrop"><section className="scoreboard"><div className="scoreboard-title">{final ? "Final Scoreboard" : "Scoreboard"}</div>{final && endedBy && <p className="end-attribution">{endedBy} ended the game.</p>}{countdown !== undefined && <p className="score-countdown">Next deal in {countdown}s</p>}<div className="score-scroll"><table><thead><tr><th>Trump</th><th>Deal</th>{state.players.map((player) => <th className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{player.name}</th>)}</tr></thead><tbody>{history.map((deal) => <tr key={deal.roundNumber}><td className={deal.trump === "hearts" || deal.trump === "diamonds" ? "red-suit" : ""}>{suitLabel[deal.trump]}</td><td>{deal.roundNumber}</td>{state.players.map((player) => <td className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{deal.results.find((result) => result.playerId === player.id)?.roundScore ?? ""}</td>)}</tr>)}</tbody><tfoot><tr><td></td><td>Total</td>{state.players.map((player) => <td className={winners.includes(player.id) ? "winner-column" : ""} key={player.id}>{player.totalScore}</td>)}</tr></tfoot></table></div><div className="scoreboard-actions"><button className="primary-button scoreboard-ok" disabled={ready} onClick={onReady}>{ready ? "Ready ✓" : "OK"}</button>{final && isAdmin && <button className="secondary-button scoreboard-finalize" disabled={finalizing || finalized} onClick={() => void finalize()}>{finalized ? "Finalized ✓" : finalizing ? "Finalizing…" : "Finalize Result"}</button>}</div>{finalizeError && <p className="form-error finalize-error">{finalizeError}</p>}</section></div>;
 }
 
 function EndGameConfirm({ state, onCancel, onConfirm }: { state: ClientGameState; onCancel: () => void; onConfirm: () => void }) {
-  return <div className="modal-backdrop"><section className="brand-modal end-confirm"><button className="icon-link modal-close" onClick={onCancel} aria-label="Close"><X/></button><h2>End this game?</h2><div className="standings">{[...state.players].sort((a, b) => b.totalScore - a.totalScore).map((player) => <div key={player.id}><span>{player.name}</span><strong>{player.totalScore}</strong></div>)}</div><p>Current scores become final and statistics will be recorded.</p><div className="confirm-actions"><button className="secondary-button" onClick={onCancel}>Cancel</button><button className="danger-button" onClick={onConfirm}>End Game</button></div></section></div>;
+  return <div className="modal-backdrop"><section className="brand-modal end-confirm"><button className="icon-link modal-close" onClick={onCancel} aria-label="Close"><X/></button><h2>End this game?</h2><div className="standings">{[...state.players].sort((a, b) => b.totalScore - a.totalScore).map((player) => <div key={player.id}><span>{player.name}</span><strong>{player.totalScore}</strong></div>)}</div><p>The current scores will be shown on the final Scoreboard. An Admin must finalize the result before statistics are recorded.</p><div className="confirm-actions"><button className="secondary-button" onClick={onCancel}>Cancel</button><button className="danger-button" onClick={onConfirm}>End Game</button></div></section></div>;
 }

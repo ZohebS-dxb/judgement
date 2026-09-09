@@ -64,3 +64,5 @@ export type GameAction =
   | { type: "scorecard_ready"; actionId: string }
   | { type: "end_game"; actionId: string }
   | { type: "heartbeat"; actionId: string };
+
+export type BidCallStatus = "UNDER CALL" | "OVER CALL" | "EXACT";

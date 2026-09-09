@@ -6,6 +6,7 @@ import { applyAction, applyTimedTransitions, createGameState, directionForRound,
 import { competitionPositions, scoreRound, trickWinner } from "./rules";
 import type { Card, GameState } from "./types";
 import { activeParticipantIds } from "./lifecycle";
+import { bidCallStatus } from "./bidding";
 
 const c=(rank:Card["rank"],suit:Card["suit"]):Card=>({rank,suit});
 const people=(count=4)=>Array.from({length:count},(_,seat)=>({id:`p${seat+1}`,profileId:`profile${seat+1}`,name:`P${seat+1}`,seat}));
@@ -40,6 +41,7 @@ describe("secret bidding and timers",()=>{
   it("locks duplicate bids",()=>{let state=createGameState("g",people(3),"custom",2);state=applyAction(state,"p1",{type:"place_bid",bid:0,actionId:actionId(1)});expect(()=>applyAction(state,"p1",{type:"place_bid",bid:1,actionId:actionId(2)})).toThrow("already locked");});
   it("auto-submits zero at the authoritative deadline",()=>{const state=createGameState("g",people(3),"custom",2,15,new Date(0),0);const timed=applyTimedTransitions(state,15,new Date(15_000));expect(timed.phase).toBe("playing");expect(timed.players.every(p=>p.bid===0)).toBe(true);expect(timed.autoBidPlayerIds).toHaveLength(3);});
   it("does not restart or repeat a timer transition after refresh",()=>{const state=createGameState("g",people(3),"custom",2,15,new Date(0),0);const once=applyTimedTransitions(state,15,new Date(16_000));const twice=applyTimedTransitions(once,15,new Date(17_000));expect(twice.version).toBe(once.version);expect(twice.biddingEndsAt).toBeNull();});
+  it("reports under call, over call and exact only after every bid is known",()=>{expect(bidCallStatus([{bid:1},{bid:null},{bid:2}],5)).toBeNull();expect(bidCallStatus([{bid:1},{bid:1},{bid:1}],5)).toBe("UNDER CALL");expect(bidCallStatus([{bid:2},{bid:2},{bid:2}],5)).toBe("OVER CALL");expect(bidCallStatus([{bid:2},{bid:2},{bid:1}],5)).toBe("EXACT");});
 });
 
 describe("scoring and ranking",()=>{
@@ -54,4 +56,6 @@ describe("integrity and reconnect",()=>{
   it("retains seat and private hand across disconnect and reconnect",()=>{const state=createGameState("g",people(3),"custom",3);const view=toClientState(state,"p2");expect(view.players.find(p=>p.id==="p2")?.seat).toBe(1);expect(view.hand).toEqual(state.hands.p2);expect(view).not.toHaveProperty("hands");});
   it("lets any seated player end early, records who did it, and keeps current totals",()=>{const base=createGameState("g",people(3),"custom",3);const state={...base,players:base.players.map((p,i)=>({...p,totalScore:(i+1)*10}))};const ended=applyAction(state,"p2",{type:"end_game",actionId:actionId(99)});expect(ended.phase).toBe("game_complete");expect(ended.endedEarly).toBe(true);expect(ended.endedByPlayerId).toBe("p2");expect(ended.players.map(p=>p.totalScore)).toEqual([10,20,30]);expect(ended.hands).toEqual({});});
   it("never carries participants from completed or abandoned games into the active lobby",()=>{const games=[{id:"old",status:"completed"},{id:"abandoned",status:"abandoned"},{id:"new",status:"lobby"}];const participants=[{id:"old-player",gameId:"old"},{id:"abandoned-player",gameId:"abandoned"},{id:"new-player",gameId:"new"}];expect(activeParticipantIds(games,participants)).toEqual(["new-player"]);});
+  it("keeps completed game state pending until the admin-only idempotent database finalizer runs",()=>{const persistence=readFileSync("lib/server/persist.ts","utf8");const migration=readFileSync("supabase/migrations/004_admin_finalization_and_stats_reset.sql","utf8");expect(persistence).not.toContain("final_score:");expect(persistence).not.toContain('status: "completed"');expect(migration).toContain("for update");expect(migration).toContain("if current_status = 'completed' then return false");expect(migration).toContain("game_state->>'phase' <> 'game_complete'");});
+  it("resets statistics with a cutoff while preserving the player and historical rows",()=>{const migration=readFileSync("supabase/migrations/004_admin_finalization_and_stats_reset.sql","utf8");const endpoint=readFileSync("app/api/admin/players/[id]/reset-stats/route.ts","utf8");expect(migration).toContain("add column if not exists stats_reset_at");expect(migration).toContain("g.completed_at > p.stats_reset_at");expect(endpoint).toContain("requireAdmin()");expect(endpoint).toContain("stats_reset_at");expect(endpoint).not.toContain('.delete()');});
 });
