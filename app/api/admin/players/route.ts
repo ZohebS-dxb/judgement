@@ -6,7 +6,9 @@ import { adminDb } from "@/lib/server/db";
 import { apiError } from "@/lib/server/http";
 
 export async function GET() {
-  try { await requireAdmin(); const { data, error } = await adminDb().from("players").select("id,name,active,archived_at,created_at").order("name"); if (error) throw error; return NextResponse.json({ players: data }); }
+  try { await requireAdmin(); const db = adminDb(); const { data, error } = await db.from("players").select("id,name,active,archived_at,created_at").order("name"); if (error) throw error;
+    const players = await Promise.all((data ?? []).map(async player => { const { count } = await db.from("game_participants").select("id", { count: "exact", head: true }).eq("player_id", player.id).not("final_score", "is", null); return { ...player, has_history: (count ?? 0) > 0 }; }));
+    return NextResponse.json({ players }); }
   catch (error) { return apiError(error); }
 }
 

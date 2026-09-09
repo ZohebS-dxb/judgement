@@ -18,3 +18,9 @@ export function legalCards(hand: Card[], ledSuit: Card["suit"] | null): Card[] {
   const following = hand.filter((card) => card.suit === ledSuit);
   return following.length ? following : hand;
 }
+
+export function sortHand(hand: Card[]): Card[] {
+  const suitOrder: Record<Card["suit"], number> = { spades: 0, hearts: 1, diamonds: 2, clubs: 3 };
+  const rankOrder = Object.fromEntries(RANKS.map((rank, index) => [rank, index]));
+  return [...hand].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || rankOrder[b.rank] - rankOrder[a.rank]);
+}

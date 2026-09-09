@@ -11,7 +11,9 @@ A private, mobile-first, server-authoritative Judgement game for three or four p
 - Supabase Realtime sends content-free refresh signals. A three-second poll and `pageshow`, visibility and online handlers restore state after phone locks, browser backgrounding or network loss.
 - Complete hands and undealt cards are never sent to other players. Undealt cards are discarded from active state immediately after dealing.
 
-There is one `lobby` or `in_progress` game at a time, enforced by a partial unique PostgreSQL index. Starting a new game abandons the previous one; abandoned games never affect statistics.
+There is one `lobby` or `in_progress` game at a time, enforced by a partial unique PostgreSQL index. Only an administrator can abandon that game. Players may end an in-progress game from the table; the standings at that moment are saved and count toward statistics.
+
+The phone UI is landscape-only and targets Safari on iPhone and Chrome on Android. A portrait orientation gate asks the player to rotate their device before exposing the table. The hand stays on one row through 12 cards and uses a compact second row for larger three-player rounds.
 
 ## Rules
 
@@ -20,17 +22,17 @@ There is one `lobby` or `in_progress` game at a time, enforced by a partial uniq
 - Full games are clockwise through the entire one-card round, then counter-clockwise. Dealer, dealing, first leader, turns and trick traversal all use the same direction helper.
 - Round-one trump is Spades, then Hearts, Diamonds and Clubs repeatedly. There is no no-trump round.
 - Bids are secret and simultaneous, from zero to cards dealt. All are revealed together. No final-bid restriction applies.
-- The server deadline defaults to 15 seconds. Missing bids become zero at expiry. Refreshing cannot restart it.
+- The server deadline defaults to 20 seconds and is configurable by an administrator from 5–60 seconds in five-second steps. The final five seconds are highlighted in red. Missing bids become zero at expiry. Refreshing cannot restart it.
 - Players must follow suit when possible. When void, any card may be played; playing trump is not compulsory. Highest trump wins, otherwise highest led-suit card wins. Ace is high.
 - Exact non-zero bid: `+10 × bid`. Missed non-zero bid: `−10 × bid`. Successful zero: `+10`; failed zero: `−10`.
-- A synchronized ten-second scorecard follows every round. Connected players may all press Ready to advance sooner.
+- A synchronized ten-second scorecard follows every round. Players can acknowledge it with the OK button; play continues automatically when the timer expires.
 - Highest final score wins; tied leaders all win. Tied lowest scores all count as last. Positions use shared competition ranking.
 
 ## Local and Supabase setup
 
 1. Install Node.js 20+ and run `npm install`.
 2. Create a Supabase project.
-3. Run [`supabase/migrations/001_initial_schema.sql`](./supabase/migrations/001_initial_schema.sql) in its SQL editor. This seeds Zoheb, Divya, Saurabh, Ashu, Ashish, Anas and Sid with no PINs.
+3. Run [`supabase/migrations/001_initial_schema.sql`](./supabase/migrations/001_initial_schema.sql), followed by [`supabase/migrations/002_landscape_redesign.sql`](./supabase/migrations/002_landscape_redesign.sql), in its SQL editor. The first migration seeds Zoheb, Divya, Saurabh, Ashu, Ashish, Anas and Sid with no PINs; the second adds the revised timer and statistics view.
 4. Copy `.env.example` to `.env.local` and set:
 
    ```env
@@ -66,7 +68,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-Tests cover hand limits, undealt-card privacy, suit/trump/rank rules, both directions, reversal, dealer and leader progression, secret bids, timer restoration, zero auto-bids, all scoring variants, tied rankings, duplicate actions, reconnect privacy and abandoned-game statistics.
+Tests cover hand limits, hand ordering, undealt-card privacy, suit/trump/rank rules, both directions, reversal, dealer and leader progression, secret bids, timer restoration, zero auto-bids, trick-review visibility, all scoring variants, tied rankings, early game completion, duplicate actions, reconnect privacy and abandoned-game statistics.
 
 ## Card licence
 

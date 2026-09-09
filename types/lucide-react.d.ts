@@ -9,13 +9,17 @@ declare module "lucide-react" {
   export const Crown: Icon;
   export const DoorOpen: Icon;
   export const History: Icon;
+  export const House: Icon;
   export const LoaderCircle: Icon;
   export const LogOut: Icon;
+  export const Minus: Icon;
   export const Plus: Icon;
+  export const RotateCw: Icon;
   export const Spade: Icon;
   export const Trophy: Icon;
   export const Trash2: Icon;
   export const UserRoundPlus: Icon;
+  export const UserPlus: Icon;
   export const Users: Icon;
   export const Wifi: Icon;
   export const WifiOff: Icon;

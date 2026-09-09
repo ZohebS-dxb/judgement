@@ -13,7 +13,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: row, error } = await db.from("game_states").select("state,version").eq("game_id", id).single(); if (error || !row) throw error ?? new Error("Game state not found");
       const previous = row.state as GameState; const now = new Date();
-      const next = applyAction(previous, participant.id, { type: "heartbeat", actionId: `presence-${participant.id}-${Math.floor(now.getTime() / 5000)}` }, config?.bidding_timer_seconds ?? 15, now);
+      const next = applyAction(previous, participant.id, { type: "heartbeat", actionId: `presence-${participant.id}-${Math.floor(now.getTime() / 5000)}` }, config?.bidding_timer_seconds ?? 20, now);
       if (next === previous) return NextResponse.json({ state: toClientState(previous, participant.id), participantId: participant.id, cardConfirmation: config?.card_confirmation ?? true });
       const { data: changed } = await db.from("game_states").update({ state: next, version: next.version, updated_at: now.toISOString() }).eq("game_id", id).eq("version", row.version).select("version").maybeSingle();
       if (!changed) continue; await persistCompletedGame(previous, next); await db.from("game_updates").insert({ game_id: id, version: next.version });

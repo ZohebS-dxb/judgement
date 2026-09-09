@@ -1,8 +1,9 @@
 import type { RoundMode, Suit } from "./types";
 
 export const TRUMP_ROTATION: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
-export const DEFAULT_BIDDING_SECONDS = 15;
+export const DEFAULT_BIDDING_SECONDS = 20;
 export const SCORECARD_SECONDS = 10;
+export const TRICK_REVIEW_SECONDS = 1;
 export const PRESENCE_WINDOW_SECONDS = 20;
 
 export function maximumCards(playerCount: number) {

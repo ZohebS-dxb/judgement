@@ -13,7 +13,7 @@ export async function POST() {
     if (!rows || rows.length < 3 || rows.length > 4) throw new Error("Three or four players are required");
     if (game.mode === "custom" && rows.length === 4 && (game.custom_rounds ?? 10) > 12) throw new Error("Reduce custom rounds to 12 or fewer before starting with four players");
     const { data: config } = await db.from("admin_config").select("bidding_timer_seconds").eq("singleton", true).single();
-    const state = createGameState(game.id, rows.map((row) => ({ id: row.id, profileId: row.player_id, name: row.guest_name ?? (row.players as unknown as { name: string } | null)?.name ?? "Guest", seat: row.seat_position })), game.mode, game.custom_rounds ?? 10, config?.bidding_timer_seconds ?? 15);
+    const state = createGameState(game.id, rows.map((row) => ({ id: row.id, profileId: row.player_id, name: row.guest_name ?? (row.players as unknown as { name: string } | null)?.name ?? "Guest", seat: row.seat_position })), game.mode, game.custom_rounds ?? 10, config?.bidding_timer_seconds ?? 20);
     const { error: stateError } = await db.from("game_states").insert({ game_id: game.id, version: state.version, state }); if (stateError) throw stateError;
     const { error } = await db.from("games").update({ status: "in_progress", player_count: rows.length, started_at: new Date().toISOString() }).eq("id", game.id).eq("status", "lobby"); if (error) throw error;
     await db.from("game_updates").insert({ game_id: game.id, version: state.version }); return NextResponse.json({ gameId: game.id });

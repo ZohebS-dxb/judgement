@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { legalCards } from "./cards";
+import { legalCards, sortHand } from "./cards";
 import { maximumCards, roundSizes, trumpForRound } from "./config";
 import { applyAction, applyTimedTransitions, createGameState, directionForRound, toClientState, traverse } from "./engine";
 import { competitionPositions, scoreRound, trickWinner } from "./rules";
@@ -23,6 +23,8 @@ describe("tricks",()=>{
   it("highest trump wins",()=>{expect(trickWinner([{playerId:"p1",card:c("A","hearts")},{playerId:"p2",card:c("2","spades")},{playerId:"p3",card:c("K","hearts")}],"spades")).toBe("p2");});
   it("highest led suit wins and unrelated off-suit cannot",()=>{expect(trickWinner([{playerId:"p1",card:c("10","clubs")},{playerId:"p2",card:c("A","hearts")},{playerId:"p3",card:c("K","clubs")}],"spades")).toBe("p3");});
   it("ranks ace high",()=>{expect(trickWinner([{playerId:"p1",card:c("K","diamonds")},{playerId:"p2",card:c("A","diamonds")},{playerId:"p3",card:c("2","diamonds")}],"clubs")).toBe("p2");});
+  it("sorts hands by suit and descending rank",()=>{expect(sortHand([c("2","clubs"),c("K","hearts"),c("A","spades"),c("3","hearts")])).toEqual([c("A","spades"),c("K","hearts"),c("3","hearts"),c("2","clubs")]);});
+  it("keeps a completed trick visible for one second",()=>{const base=createGameState("g",people(3),"custom",1,20,new Date(0),0);let state:GameState={...base,phase:"playing",activePlayerIndex:0,players:base.players.map(p=>({...p,bid:0})),hands:{p1:[c("A","spades")],p2:[c("K","spades")],p3:[c("Q","spades")]}};state=applyAction(state,"p1",{type:"play_card",card:c("A","spades"),actionId:actionId(31)},20,new Date(100));state=applyAction(state,"p2",{type:"play_card",card:c("K","spades"),actionId:actionId(32)},20,new Date(200));state=applyAction(state,"p3",{type:"play_card",card:c("Q","spades"),actionId:actionId(33)},20,new Date(300));expect(state.phase).toBe("trick_complete");expect(state.currentTrick).toHaveLength(3);expect(state.trickWinnerId).toBe("p1");expect(applyTimedTransitions(state,20,new Date(1000)).phase).toBe("trick_complete");expect(applyTimedTransitions(state,20,new Date(1300)).phase).toBe("round_complete");});
 });
 
 describe("direction",()=>{
@@ -49,4 +51,5 @@ describe("integrity and reconnect",()=>{
   it("makes duplicate action IDs idempotent",()=>{let state=createGameState("g",people(3),"custom",2);const action={type:"place_bid" as const,bid:0,actionId:actionId(1)};state=applyAction(state,"p1",action);const duplicate=applyAction(state,"p1",action);expect(duplicate).toBe(state);});
   it("rejects duplicate card submission",()=>{const base=createGameState("g",people(3),"custom",1);let state:GameState={...base,phase:"playing",activePlayerIndex:0,players:base.players.map(p=>({...p,bid:0})),hands:{p1:[c("A","spades")],p2:[c("K","spades")],p3:[c("Q","spades")]}};const action={type:"play_card" as const,card:c("A","spades"),actionId:actionId(1)};state=applyAction(state,"p1",action);expect(applyAction(state,"p1",action)).toBe(state);});
   it("retains seat and private hand across disconnect and reconnect",()=>{const state=createGameState("g",people(3),"custom",3);const view=toClientState(state,"p2");expect(view.players.find(p=>p.id==="p2")?.seat).toBe(1);expect(view.hand).toEqual(state.hands.p2);expect(view).not.toHaveProperty("hands");});
+  it("lets any seated player end early without changing current totals",()=>{const base=createGameState("g",people(3),"custom",3);const state={...base,players:base.players.map((p,i)=>({...p,totalScore:(i+1)*10}))};const ended=applyAction(state,"p2",{type:"end_game",actionId:actionId(99)});expect(ended.phase).toBe("game_complete");expect(ended.endedEarly).toBe(true);expect(ended.players.map(p=>p.totalScore)).toEqual([10,20,30]);expect(ended.hands).toEqual({});});
 });
