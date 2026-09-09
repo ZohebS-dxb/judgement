@@ -4,11 +4,12 @@ import { z } from "zod";
 import { createGuestSession, currentGuest, currentPlayer } from "@/lib/server/auth";
 import { adminDb } from "@/lib/server/db";
 import { apiError } from "@/lib/server/http";
+import { ACTIVE_GAME_STATUSES } from "@/lib/game/lifecycle";
 
 export async function POST(request: NextRequest) {
   try {
     const body = z.object({ guestName: z.string().trim().min(1).max(30).optional() }).parse(await request.json().catch(() => ({}))); const db = adminDb();
-    const { data: game } = await db.from("games").select("id,status").in("status", ["lobby","in_progress"]).maybeSingle();
+    const { data: game } = await db.from("games").select("id,status").in("status", [...ACTIVE_GAME_STATUSES]).maybeSingle();
     if (!game) return NextResponse.json({ error: "No game is currently running." }, { status: 404 });
     const player = await currentPlayer(); const guest = await currentGuest();
     if (player) {

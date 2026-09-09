@@ -17,10 +17,12 @@ const schema = z.discriminatedUnion("type", [
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params; const participant = await participantForGame(id); const action = schema.parse(await request.json()) as GameAction; const db = adminDb();
-    const { data: config } = await db.from("admin_config").select("bidding_timer_seconds").eq("singleton", true).single();
+    const { data: game } = await db.from("games").select("status").eq("id", id).single();
+    if (game?.status === "abandoned") return NextResponse.json({ error: "Game abandoned by Admin." }, { status: 410 });
+    const { data: config } = await db.from("admin_config").select("bidding_timer_seconds,scoreboard_timer_seconds").eq("singleton", true).single();
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: row, error: readError } = await db.from("game_states").select("state,version").eq("game_id", id).single(); if (readError || !row) throw readError ?? new Error("Game state not found");
-      const previous = row.state as GameState; const next = applyAction(previous, participant.id, action, config?.bidding_timer_seconds ?? 20);
+      const previous = row.state as GameState; const next = applyAction(previous, participant.id, action, config?.bidding_timer_seconds ?? 20, new Date(), config?.scoreboard_timer_seconds ?? 30);
       if (next === previous) return NextResponse.json({ state: toClientState(previous, participant.id) });
       const { data: changed, error } = await db.from("game_states").update({ state: next, version: next.version, updated_at: new Date().toISOString() }).eq("game_id", id).eq("version", row.version).select("version").maybeSingle();
       if (error) throw error; if (!changed) continue; await persistCompletedGame(previous, next); await db.from("game_updates").insert({ game_id: id, version: next.version });

@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { cardId, createDeck, legalCards, shuffle, sortHand } from "./cards";
-import { DEFAULT_BIDDING_SECONDS, PRESENCE_WINDOW_SECONDS, SCORECARD_SECONDS, TRICK_REVIEW_SECONDS, roundSizes, trumpForRound } from "./config";
+import { DEFAULT_BIDDING_SECONDS, DEFAULT_SCORECARD_SECONDS, PRESENCE_WINDOW_SECONDS, TRICK_REVIEW_SECONDS, roundSizes, trumpForRound } from "./config";
 import { roundResults, trickWinner } from "./rules";
 import type { Card, ClientGameState, Direction, GameAction, GameState, PlayerState, RoundMode } from "./types";
 
@@ -52,7 +52,7 @@ export function createGameState(
   return deal({ version: 1, gameId, mode, roundSizes: sizes, roundNumber: 1, phase: "bidding", direction: "clockwise", dealerIndex: chosenDealer,
     activePlayerIndex: 0, cardsDealt: 0, trump: "spades", biddingEndsAt: null, scorecardEndsAt: null, trickWinnerId: null, trickEndsAt: null, readyPlayerIds: [], autoBidPlayerIds: [],
     presence: Object.fromEntries(players.map((player) => [player.id, now.toISOString()])), players, hands: {}, currentTrick: [], completedTricks: [],
-    lastRoundResults: [], scoreHistory: [], endedEarly: false, processedActionIds: [] }, biddingSeconds, now);
+    lastRoundResults: [], scoreHistory: [], endedEarly: false, endedByPlayerId: null, processedActionIds: [] }, biddingSeconds, now);
 }
 
 function revealBids(state: GameState): GameState {
@@ -67,37 +67,37 @@ function advanceRound(state: GameState, biddingSeconds: number, now: Date): Game
   return deal({ ...state, version: state.version + 1, roundNumber, dealerIndex, direction }, biddingSeconds, now);
 }
 
-function finishResolvedTrick(state: GameState, now: Date): GameState {
+function finishResolvedTrick(state: GameState, now: Date, scorecardSeconds: number): GameState {
   const winnerIndex = state.players.findIndex((player) => player.id === state.trickWinnerId);
   if (state.completedTricks.length < state.cardsDealt) return { ...state, version: state.version + 1, phase: "playing", currentTrick: [], trickWinnerId: null, trickEndsAt: null, activePlayerIndex: winnerIndex };
   const results = roundResults(state.players);
   const players = state.players.map((player) => ({ ...player, totalScore: results.find((result) => result.playerId === player.id)!.totalScore }));
   return { ...state, version: state.version + 1, players, phase: "round_complete", currentTrick: [], trickWinnerId: null, trickEndsAt: null,
     lastRoundResults: results, scoreHistory: [...(state.scoreHistory ?? []), { roundNumber: state.roundNumber, trump: state.trump, results }],
-    scorecardEndsAt: new Date(now.getTime() + SCORECARD_SECONDS * 1000).toISOString(), readyPlayerIds: [] };
+    scorecardEndsAt: new Date(now.getTime() + scorecardSeconds * 1000).toISOString(), readyPlayerIds: [] };
 }
 
-export function applyTimedTransitions(state: GameState, biddingSeconds: number, now = new Date()): GameState {
+export function applyTimedTransitions(state: GameState, biddingSeconds: number, now = new Date(), scorecardSeconds = DEFAULT_SCORECARD_SECONDS): GameState {
   if (state.phase === "bidding" && state.biddingEndsAt && now >= new Date(state.biddingEndsAt)) {
     const autoBidPlayerIds = state.players.filter((player) => player.bid === null).map((player) => player.id);
     return revealBids({ ...state, version: state.version + 1, autoBidPlayerIds, players: state.players.map((player) => player.bid === null ? { ...player, bid: 0 } : player) });
   }
-  if (state.phase === "trick_complete" && state.trickEndsAt && now >= new Date(state.trickEndsAt)) return finishResolvedTrick(state, now);
+  if (state.phase === "trick_complete" && state.trickEndsAt && now >= new Date(state.trickEndsAt)) return finishResolvedTrick(state, now, scorecardSeconds);
   if (state.phase === "round_complete" && state.scorecardEndsAt && now >= new Date(state.scorecardEndsAt)) return advanceRound(state, biddingSeconds, now);
   return state;
 }
 
-export function applyAction(state: GameState, actorId: string, action: GameAction, biddingSeconds = DEFAULT_BIDDING_SECONDS, now = new Date()): GameState {
+export function applyAction(state: GameState, actorId: string, action: GameAction, biddingSeconds = DEFAULT_BIDDING_SECONDS, now = new Date(), scorecardSeconds = DEFAULT_SCORECARD_SECONDS): GameState {
   if (!state.players.some((player) => player.id === actorId)) throw new Error("Player is not in this game");
   if (state.processedActionIds.includes(action.actionId)) return state;
-  state = applyTimedTransitions(state, biddingSeconds, now);
+  state = applyTimedTransitions(state, biddingSeconds, now, scorecardSeconds);
   const actorIndex = state.players.findIndex((player) => player.id === actorId);
   const common = { version: state.version + 1, processedActionIds: rememberAction(state, action.actionId), presence: { ...state.presence, [actorId]: now.toISOString() } };
   if (action.type === "heartbeat") return { ...state, ...common };
 
   if (action.type === "end_game") {
     if (state.phase === "game_complete") return state;
-    return { ...state, ...common, phase: "game_complete", endedEarly: true, biddingEndsAt: null, scorecardEndsAt: null, trickEndsAt: null, currentTrick: [], hands: {}, completedTricks: [] };
+    return { ...state, ...common, phase: "game_complete", endedEarly: true, endedByPlayerId: actorId, biddingEndsAt: null, scorecardEndsAt: null, trickEndsAt: null, currentTrick: [], hands: {}, completedTricks: [] };
   }
 
   if (action.type === "place_bid") {

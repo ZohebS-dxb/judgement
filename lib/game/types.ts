@@ -48,6 +48,7 @@ export type GameState = {
   lastRoundResults: RoundResult[];
   scoreHistory?: RoundScoreSnapshot[];
   endedEarly?: boolean;
+  endedByPlayerId?: string | null;
   processedActionIds: string[];
 };
 

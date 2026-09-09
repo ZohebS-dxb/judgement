@@ -12,5 +12,5 @@ export async function persistCompletedGame(previous: GameState, next: GameState)
     final_score: player.totalScore, finishing_position: positions[player.id],
     is_winner: player.totalScore === highest, is_last: player.totalScore === lowest,
   }).eq("id", player.id).eq("game_id", next.gameId)));
-  await db.from("games").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", next.gameId);
+  await db.from("games").update({ status: "completed", completed_at: new Date().toISOString(), ended_by_participant_id: next.endedByPlayerId ?? null }).eq("id", next.gameId);
 }
