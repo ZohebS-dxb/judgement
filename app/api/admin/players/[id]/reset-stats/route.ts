@@ -7,9 +7,18 @@ export async function POST(_: NextRequest, context: { params: Promise<{ id: stri
   try {
     await requireAdmin();
     const { id } = await context.params;
-    const { data, error } = await adminDb().from("players").update({ stats_reset_at: new Date().toISOString() }).eq("id", id).select("id").maybeSingle();
-    if (error) throw error;
-    if (!data) throw new Error("Player not found");
+    const db = adminDb();
+    const { data: player, error: playerError } = await db.from("players").select("id").eq("id", id).maybeSingle();
+    if (playerError) throw playerError;
+    if (!player) throw new Error("Player not found");
+
+    const { data: completedGames, error: gamesError } = await db.from("games").select("id").eq("status", "completed");
+    if (gamesError) throw gamesError;
+    const gameIds = completedGames?.map((game) => game.id) ?? [];
+    if (gameIds.length > 0) {
+      const { error: resetError } = await db.from("game_participants").delete().eq("player_id", id).in("game_id", gameIds);
+      if (resetError) throw resetError;
+    }
     return NextResponse.json({ ok: true });
   } catch (error) { return apiError(error); }
 }
