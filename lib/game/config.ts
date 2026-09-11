@@ -3,7 +3,7 @@ import type { RoundMode, Suit } from "./types";
 export const TRUMP_ROTATION: Suit[] = ["spades", "hearts", "diamonds", "clubs"];
 export const DEFAULT_BIDDING_SECONDS = 20;
 export const DEFAULT_SCORECARD_SECONDS = 30;
-export const TRICK_REVIEW_SECONDS = 1;
+export const TRICK_REVIEW_SECONDS = 1.4;
 export const PRESENCE_WINDOW_SECONDS = 20;
 
 export function maximumCards(playerCount: number) {

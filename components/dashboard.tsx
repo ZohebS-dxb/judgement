@@ -1,13 +1,70 @@
 "use client";
+
 import { BarChart3, Plus, Shield, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function Dashboard({playerName}:{playerName:string|null}){
-  const router=useRouter(); const [creating,setCreating]=useState(false); const [mode,setMode]=useState<"custom"|"half"|"full">("custom"); const [customRounds,setCustomRounds]=useState(10); const [error,setError]=useState(""); const [existing,setExisting]=useState(false); const [busy,setBusy]=useState(false); const[notice,setNotice]=useState("");
-  useEffect(()=>{const message=sessionStorage.getItem("judgement_notice");if(message){setNotice(message);sessionStorage.removeItem("judgement_notice");}},[]);
-  async function create(){if(!playerName)return router.push("/login");setBusy(true);setError("");const response=await fetch("/api/games/current/create",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mode,customRounds})});const body=await response.json();setBusy(false);if(response.status===409){setExisting(true);return;}if(!response.ok)return setError(body.error);router.push("/lobby");}
-  async function resume(){const response=await fetch("/api/games/current/join",{method:"POST",headers:{"content-type":"application/json"},body:"{}"});const body=await response.json();if(!response.ok)return setError(body.error);router.push("/lobby");}
-  return <main className="landscape-page home-page"><a className="icon-link home-admin" href="/admin" aria-label="Admin"><Shield/></a><section className="home-primary-group"><h1>Judgement</h1><div className="home-actions"><button className="home-action coral" onClick={()=>setCreating(true)}><Plus/><span>Create</span></button><button className="home-action blue" onClick={()=>router.push("/join")}><Users/><span>Join</span></button><button className="home-action mist" onClick={()=>router.push("/stats")}><BarChart3/><span>Stats</span></button></div></section><span className="home-signature">Zoheb Siddiqui</span>{notice&&<div className="home-notice">{notice}</div>}
-  {creating&&<div className="modal-backdrop"><section className="brand-modal create-modal"><button className="icon-link modal-close" onClick={()=>setCreating(false)} aria-label="Close"><X/></button><h2>Create</h2><div className="mode-picker">{(["custom","half","full"] as const).map(value=><button className={mode===value?"active":""} onClick={()=>setMode(value)} key={value}>{value[0].toUpperCase()+value.slice(1)}</button>)}</div>{mode==="custom"&&<div className="stepper"><button onClick={()=>setCustomRounds(Math.max(1,customRounds-1))}>−</button><strong>{customRounds} deals</strong><button onClick={()=>setCustomRounds(Math.min(17,customRounds+1))}>+</button></div>}{existing?<div className="existing-actions"><p>A game is already running.</p><button className="primary-button" onClick={resume}>Continue game</button><a className="text-button" href="/admin">Open Admin</a></div>:<button className="primary-button full create-submit" onClick={create} disabled={busy}>{busy?"Creating…":"Create"}</button>}<p className="form-error">{error}</p></section></div>}</main>;
+export function Dashboard({ playerName }: { playerName: string | null }) {
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [mode, setMode] = useState<"custom" | "half" | "full">("custom");
+  const [customRounds, setCustomRounds] = useState(10);
+  const [error, setError] = useState("");
+  const [existing, setExisting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const message = sessionStorage.getItem("judgement_notice");
+    if (message) { setNotice(message); sessionStorage.removeItem("judgement_notice"); }
+  }, []);
+
+  async function openCreate() {
+    if (!playerName) return router.push("/login");
+    setCreating(true); setError("");
+    const response = await fetch("/api/games/current", { cache: "no-store" });
+    if (response.ok) setExisting(Boolean((await response.json()).game));
+  }
+
+  async function create() {
+    setBusy(true); setError("");
+    const response = await fetch("/api/games/current/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, customRounds }) });
+    const body = await response.json(); setBusy(false);
+    if (response.status === 409) { setExisting(true); return; }
+    if (!response.ok) return setError(body.error);
+    router.push("/lobby");
+  }
+
+  async function resume() {
+    const response = await fetch("/api/games/current/join", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = await response.json();
+    if (!response.ok) return setError(body.error);
+    router.push("/lobby");
+  }
+
+  async function abandon() {
+    if (!confirm("Abandon this game? It will end immediately and normal game-result statistics will not be recorded.")) return;
+    setBusy(true); setError("");
+    const response = await fetch("/api/games/current/abandon", { method: "POST" });
+    const body = await response.json(); setBusy(false);
+    if (!response.ok) return setError(body.error);
+    setExisting(false); setCreating(false); setNotice("Game abandoned. You can create a new game.");
+  }
+
+  return <main className="landscape-page home-page">
+    <a className="icon-link home-admin" href="/admin" aria-label="Admin"><Shield /></a>
+    <section className="home-primary-group"><h1>Judgement</h1><div className="home-actions">
+      <button className="home-action coral" onClick={() => void openCreate()}><Plus /><span>Create</span></button>
+      <button className="home-action blue" onClick={() => router.push("/join")}><Users /><span>Join</span></button>
+      <button className="home-action mist" onClick={() => router.push("/stats")}><BarChart3 /><span>Stats</span></button>
+    </div></section>
+    <span className="home-signature">Zoheb Siddiqui</span>{notice && <div className="home-notice">{notice}</div>}
+    {creating && <div className="modal-backdrop"><section className="brand-modal create-modal">
+      <button className="icon-link modal-close" onClick={() => setCreating(false)} aria-label="Close"><X /></button><h2>Create</h2>
+      <div className="mode-picker">{(["custom", "half", "full"] as const).map((value) => <button className={mode === value ? "active" : ""} onClick={() => setMode(value)} key={value}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
+      {mode === "custom" && <div className="stepper"><button onClick={() => setCustomRounds(Math.max(1, customRounds - 1))}>−</button><strong>{customRounds} deals</strong><button onClick={() => setCustomRounds(Math.min(17, customRounds + 1))}>+</button></div>}
+      {existing ? <div className="existing-actions"><p>A game is already running.</p><button className="primary-button" onClick={resume}>Continue game</button><button className="danger-button" disabled={busy} onClick={() => void abandon()}>{busy ? "Abandoning…" : "Abandon Game"}</button></div> : <button className="primary-button full create-submit" onClick={create} disabled={busy}>{busy ? "Creating…" : "Create"}</button>}
+      <p className="form-error">{error}</p>
+    </section></div>}
+  </main>;
 }

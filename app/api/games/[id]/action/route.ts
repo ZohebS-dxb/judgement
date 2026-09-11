@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   try {
     const { id } = await context.params; const participant = await participantForGame(id); const action = schema.parse(await request.json()) as GameAction; const db = adminDb();
     const { data: game } = await db.from("games").select("status").eq("id", id).single();
-    if (game?.status === "abandoned") return NextResponse.json({ error: "Game abandoned by Admin." }, { status: 410 });
+    if (game?.status === "abandoned") return NextResponse.json({ error: "Game was abandoned." }, { status: 410 });
     const { data: config } = await db.from("admin_config").select("bidding_timer_seconds,scoreboard_timer_seconds").eq("singleton", true).single();
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: row, error: readError } = await db.from("game_states").select("state,version").eq("game_id", id).single(); if (readError || !row) throw readError ?? new Error("Game state not found");
