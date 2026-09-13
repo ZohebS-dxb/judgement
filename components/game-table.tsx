@@ -23,7 +23,7 @@ export function GameTable({ gameId }: { gameId: string }) {
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [now, setNow] = useState(Date.now()); const [bidValue, setBidValue] = useState(0);
   const [showEnd, setShowEnd] = useState(false); const [showScoreboard, setShowScoreboard] = useState(false); const [autoBidNotice, setAutoBidNotice] = useState(false);
   const [optimisticPlay, setOptimisticPlay] = useState<OptimisticPlay | null>(null); const [optimisticBid, setOptimisticBid] = useState<number | null>(null); const [showSpecial, setShowSpecial] = useState(false);
-  const [soundOn, setSoundOn] = useState(true); const lastUrgent = useRef<number | null>(null); const priorPhase = useRef<ClientGameState["phase"] | null>(null); const acknowledgedTrick = useRef("");
+  const [soundOn, setSoundOn] = useState(true); const lastUrgent = useRef<number | null>(null); const priorPhase = useRef<ClientGameState["phase"] | null>(null); const acknowledgedTrick = useRef(""); const heardDeal = useRef(0); const heardPlay = useRef(""); const audioStateLoaded = useRef(false);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/games/${gameId}/state`, { cache: "no-store" }); const body = await response.json();
@@ -45,6 +45,14 @@ export function GameTable({ gameId }: { gameId: string }) {
   useEffect(() => { setBidValue(0); }, [state?.roundNumber]);
   useEffect(() => { const seconds = state?.biddingEndsAt ? Math.max(0, Math.ceil((new Date(state.biddingEndsAt).getTime() - now) / 1000)) : null; if (seconds !== null && seconds <= 5 && seconds > 0 && lastUrgent.current !== seconds) { lastUrgent.current = seconds; vibrate(10); playGameSound("tick"); } }, [state?.biddingEndsAt, now]);
   useEffect(() => { if (!state || priorPhase.current === state.phase) return; if (state.phase === "trick_complete" && state.trickWinnerId === participantId) { vibrate([18, 28, 18]); playGameSound("round"); } if (state.phase === "game_complete") { vibrate([25, 35, 25]); playGameSound("game"); } priorPhase.current = state.phase; }, [state, participantId]);
+  useEffect(() => { if (state?.phase !== "bidding" || heardDeal.current === state.roundNumber) return; heardDeal.current = state.roundNumber; playGameSound("deal"); }, [state?.phase, state?.roundNumber]);
+  useEffect(() => {
+    if (!state) return;
+    if (!audioStateLoaded.current) { audioStateLoaded.current = true; if (state.currentTrick.length) { const existing = state.currentTrick[state.currentTrick.length - 1]; heardPlay.current = `${state.roundNumber}-${state.completedTricks.length}-${state.currentTrick.length}-${existing.playerId}-${cid(existing.card)}`; } return; }
+    if (!state.currentTrick.length) return;
+    const play = state.currentTrick[state.currentTrick.length - 1]; const key = `${state.roundNumber}-${state.completedTricks.length}-${state.currentTrick.length}-${play.playerId}-${cid(play.card)}`;
+    if (heardPlay.current === key) return; heardPlay.current = key; if (play.playerId !== participantId) playGameSound("card");
+  }, [state, participantId]);
   useEffect(() => { if (!state?.trickEndsAt) return; const delay = Math.max(0, new Date(state.trickEndsAt).getTime() - Date.now() + 60); const timer = setTimeout(() => void load(), delay); return () => clearTimeout(timer); }, [state?.trickEndsAt, load]);
   useEffect(() => {
     if (state?.phase !== "trick_complete" || busy) return;
@@ -83,7 +91,7 @@ export function GameTable({ gameId }: { gameId: string }) {
   const visibleHand = optimisticPlay ? state.hand.filter((card, index) => index !== optimisticPlay.originalIndex || cid(card) !== cid(optimisticPlay.card)) : state.hand;
   const handColumns = visibleHand.length > 9 ? Math.ceil(visibleHand.length / 2) : Math.max(1, visibleHand.length);
   const visibleTrick = optimisticPlay && !state.currentTrick.some((play) => play.playerId === participantId && cid(play.card) === cid(optimisticPlay.card)) ? [...state.currentTrick, { playerId: participantId, card: optimisticPlay.card }] : state.currentTrick;
-  const playCard = async (card: Card) => { if (!state.legalCardIds.includes(cid(card)) || busy) return; const originalIndex = state.hand.findIndex((candidate) => cid(candidate) === cid(card)); const actionId = crypto.randomUUID(); const tapped = performance.now(); setOptimisticPlay({ card, originalIndex, actionId }); playGameSound("card"); requestAnimationFrame(() => gamePerf("card tap → local render", performance.now() - tapped)); await act({ type: "play_card", card }, actionId); setOptimisticPlay(null); };
+  const playCard = async (card: Card) => { if (!state.legalCardIds.includes(cid(card)) || busy) return; const originalIndex = state.hand.findIndex((candidate) => cid(candidate) === cid(card)); const actionId = crypto.randomUUID(); const tapped = performance.now(); heardPlay.current = `${state.roundNumber}-${state.completedTricks.length}-${state.currentTrick.length + 1}-${participantId}-${cid(card)}`; setOptimisticPlay({ card, originalIndex, actionId }); playGameSound("card"); requestAnimationFrame(() => gamePerf("card tap → local render", performance.now() - tapped)); await act({ type: "play_card", card }, actionId); setOptimisticPlay(null); };
   const turnText = state.phase === "bidding" ? "Place Your Bid" : state.phase === "trick_complete" ? `${state.players.find((player) => player.id === state.trickWinnerId)?.name} won this round` : `${active.name}'s Turn`;
 
   async function finalHome() {
