@@ -44,6 +44,7 @@ export type GameState = {
   currentTrick: PlayedCard[];
   trickWinnerId?: string | null;
   trickEndsAt?: string | null;
+  trickSeenPlayerIds?: string[];
   completedTricks: CompletedTrick[];
   lastRoundResults: RoundResult[];
   scoreHistory?: RoundScoreSnapshot[];
@@ -62,6 +63,7 @@ export type GameAction =
   | { type: "place_bid"; bid: number; actionId: string }
   | { type: "play_card"; card: Card; actionId: string }
   | { type: "scorecard_ready"; actionId: string }
+  | { type: "trick_seen"; actionId: string }
   | { type: "end_game"; actionId: string }
   | { type: "heartbeat"; actionId: string };
 

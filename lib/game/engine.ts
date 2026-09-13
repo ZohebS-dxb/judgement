@@ -32,7 +32,7 @@ function deal(state: GameState, biddingSeconds: number, now: Date): GameState {
   for (const player of state.players) hands[player.id] = sortHand(hands[player.id]);
   return { ...state, phase: "bidding", direction, activePlayerIndex: traverse(state.dealerIndex, state.players.length, direction), cardsDealt,
     trump: trumpForRound(state.roundNumber), biddingEndsAt: biddingSeconds > 0 ? new Date(now.getTime() + biddingSeconds * 1000).toISOString() : null,
-    scorecardEndsAt: null, trickWinnerId: null, trickEndsAt: null, readyPlayerIds: [], autoBidPlayerIds: [], hands, currentTrick: [], completedTricks: [], lastRoundResults: [],
+    scorecardEndsAt: null, trickWinnerId: null, trickEndsAt: null, trickSeenPlayerIds: [], readyPlayerIds: [], autoBidPlayerIds: [], hands, currentTrick: [], completedTricks: [], lastRoundResults: [],
     players: state.players.map((player) => ({ ...player, bid: null, tricksWon: 0 })) };
 }
 
@@ -50,7 +50,7 @@ export function createGameState(
   const sizes = roundSizes(mode, participants.length, customRounds);
   const players: PlayerState[] = participants.map((p) => ({ ...p, profileId: p.profileId ?? null, bid: null, tricksWon: 0, totalScore: 0 }));
   return deal({ version: 1, gameId, mode, roundSizes: sizes, roundNumber: 1, phase: "bidding", direction: "clockwise", dealerIndex: chosenDealer,
-    activePlayerIndex: 0, cardsDealt: 0, trump: "spades", biddingEndsAt: null, scorecardEndsAt: null, trickWinnerId: null, trickEndsAt: null, readyPlayerIds: [], autoBidPlayerIds: [],
+    activePlayerIndex: 0, cardsDealt: 0, trump: "spades", biddingEndsAt: null, scorecardEndsAt: null, trickWinnerId: null, trickEndsAt: null, trickSeenPlayerIds: [], readyPlayerIds: [], autoBidPlayerIds: [],
     presence: Object.fromEntries(players.map((player) => [player.id, now.toISOString()])), players, hands: {}, currentTrick: [], completedTricks: [],
     lastRoundResults: [], scoreHistory: [], endedEarly: false, endedByPlayerId: null, processedActionIds: [] }, biddingSeconds, now);
 }
@@ -69,11 +69,14 @@ function advanceRound(state: GameState, biddingSeconds: number, now: Date): Game
 
 function finishResolvedTrick(state: GameState, now: Date, scorecardSeconds: number): GameState {
   const winnerIndex = state.players.findIndex((player) => player.id === state.trickWinnerId);
-  if (state.completedTricks.length < state.cardsDealt) return { ...state, version: state.version + 1, phase: "playing", currentTrick: [], trickWinnerId: null, trickEndsAt: null, activePlayerIndex: winnerIndex };
+  if (state.completedTricks.length < state.cardsDealt) return { ...state, version: state.version + 1, phase: "playing", currentTrick: [], trickWinnerId: null, trickEndsAt: null, trickSeenPlayerIds: [], activePlayerIndex: winnerIndex };
   const results = roundResults(state.players);
   const players = state.players.map((player) => ({ ...player, totalScore: results.find((result) => result.playerId === player.id)!.totalScore }));
-  return { ...state, version: state.version + 1, players, phase: "round_complete", currentTrick: [], trickWinnerId: null, trickEndsAt: null,
-    lastRoundResults: results, scoreHistory: [...(state.scoreHistory ?? []), { roundNumber: state.roundNumber, trump: state.trump, results }],
+  const scoreHistory = [...(state.scoreHistory ?? []), { roundNumber: state.roundNumber, trump: state.trump, results }];
+  if (state.roundNumber >= state.roundSizes.length) return { ...state, version: state.version + 1, players, phase: "game_complete", currentTrick: [], trickWinnerId: null, trickEndsAt: null, trickSeenPlayerIds: [],
+    hands: {}, completedTricks: [], lastRoundResults: results, scoreHistory, scorecardEndsAt: null, readyPlayerIds: [] };
+  return { ...state, version: state.version + 1, players, phase: "round_complete", currentTrick: [], trickWinnerId: null, trickEndsAt: null, trickSeenPlayerIds: [],
+    lastRoundResults: results, scoreHistory,
     scorecardEndsAt: new Date(now.getTime() + scorecardSeconds * 1000).toISOString(), readyPlayerIds: [] };
 }
 
@@ -82,7 +85,13 @@ export function applyTimedTransitions(state: GameState, biddingSeconds: number, 
     const autoBidPlayerIds = state.players.filter((player) => player.bid === null).map((player) => player.id);
     return revealBids({ ...state, version: state.version + 1, autoBidPlayerIds, players: state.players.map((player) => player.bid === null ? { ...player, bid: 0 } : player) });
   }
-  if (state.phase === "trick_complete" && state.trickEndsAt && now >= new Date(state.trickEndsAt)) return finishResolvedTrick(state, now, scorecardSeconds);
+  if (state.phase === "trick_complete" && state.trickEndsAt && now >= new Date(state.trickEndsAt)) {
+    const cutoff = now.getTime() - PRESENCE_WINDOW_SECONDS * 1000;
+    const connected = state.players.filter((player) => new Date(state.presence[player.id] ?? 0).getTime() >= cutoff);
+    const allSawWinner = connected.length > 0 && connected.every((player) => (state.trickSeenPlayerIds ?? []).includes(player.id));
+    const disconnectedFallback = now.getTime() >= new Date(state.trickEndsAt).getTime() + 4_000;
+    if (allSawWinner || disconnectedFallback) return finishResolvedTrick(state, now, scorecardSeconds);
+  }
   if (state.phase === "round_complete" && state.scorecardEndsAt && now >= new Date(state.scorecardEndsAt)) return advanceRound(state, biddingSeconds, now);
   return state;
 }
@@ -98,6 +107,13 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
   if (action.type === "end_game") {
     if (state.phase === "game_complete") return state;
     return { ...state, ...common, phase: "game_complete", endedEarly: true, endedByPlayerId: actorId, biddingEndsAt: null, scorecardEndsAt: null, trickEndsAt: null, currentTrick: [], hands: {}, completedTricks: [] };
+  }
+
+  if (action.type === "trick_seen") {
+    if (state.phase !== "trick_complete") return { ...state, ...common };
+    const trickSeenPlayerIds = [...new Set([...(state.trickSeenPlayerIds ?? []), actorId])];
+    const next = { ...state, ...common, trickSeenPlayerIds };
+    return applyTimedTransitions(next, biddingSeconds, now, scorecardSeconds);
   }
 
   if (action.type === "place_bid") {
@@ -132,7 +148,7 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
   const completedTricks = [...state.completedTricks, { number: state.completedTricks.length + 1, leaderId: currentTrick[0].playerId, cards: currentTrick, winnerId }];
   const players = state.players.map((player) => player.id === winnerId ? { ...player, tricksWon: player.tricksWon + 1 } : player);
   return { ...state, ...common, hands, currentTrick, completedTricks, players, phase: "trick_complete", trickWinnerId: winnerId,
-    trickEndsAt: new Date(now.getTime() + TRICK_REVIEW_SECONDS * 1000).toISOString() };
+    trickEndsAt: new Date(now.getTime() + TRICK_REVIEW_SECONDS * 1000).toISOString(), trickSeenPlayerIds: [] };
 }
 
 export function toClientState(state: GameState, playerId: string): ClientGameState {
