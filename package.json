@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "players:create": "tsx scripts/create-players.ts",
-    "admin:set-pin": "tsx scripts/set-admin-pin.ts"
+    "admin:set-pin": "tsx scripts/set-admin-pin.ts",
+    "cards:generate": "node scripts/generate-minimal-deck.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
