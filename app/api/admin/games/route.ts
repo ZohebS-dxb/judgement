@@ -11,18 +11,24 @@ export async function GET(request: NextRequest) {
     await requireAdmin();
     const page = z.coerce.number().int().min(1).catch(1).parse(request.nextUrl.searchParams.get("page"));
     const from = (page - 1) * PAGE_SIZE;
-    const { data, count, error } = await adminDb()
+    const db = adminDb();
+    const { data, count, error } = await db
       .from("games")
-      .select("id,completed_at,started_at,created_at,mode,game_participants(id,player_id,guest_name,seat_position,final_score,finishing_position,players(name))", { count: "exact" })
+      .select("id,completed_at,started_at,created_at,mode", { count: "exact" })
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
+    const gameIds = (data ?? []).map((game) => game.id);
+    const { data: participantRows, error: participantError } = gameIds.length
+      ? await db.from("game_participants").select("game_id,player_id,guest_name,seat_position,final_score,finishing_position,players(name)").in("game_id", gameIds).order("seat_position")
+      : { data: [], error: null };
+    if (participantError) throw participantError;
     const games = (data ?? []).map((game) => ({
       id: game.id,
       completedAt: game.completed_at ?? game.started_at ?? game.created_at,
       mode: game.mode,
-      players: (game.game_participants ?? []).map((participant) => ({
+      players: (participantRows ?? []).filter((participant) => participant.game_id === game.id).map((participant) => ({
         name: participant.guest_name ?? (participant.players as unknown as { name?: string } | null)?.name ?? "Unknown player",
         score: participant.final_score,
         position: participant.finishing_position,
